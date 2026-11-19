@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/xpand/xpand-printer-agent.git"
+    "url": "https://github.com/xpandid/print-agent.git"
   },
   "scripts": {
     "start": "electron .",

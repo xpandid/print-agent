@@ -1,135 +1,142 @@
 # Xpand Printer Agent
 
-Local tray app that prints Xpand label streams (ZPL for Zebra, TSPL for TSC / Datamax,
-ESC/P for dot matrix) directly to the operator's **USB** printer, bypassing the browser
-print dialog and its paper-size matching problems.
+Local tray app that prints Xpand label streams (ZPL/TSPL/ESC/P) directly to the
+operator's **USB** printer, bypassing the browser print dialog.
 
-It runs on each workstation that has a label printer.
+Runs on each workstation that has a label printer.
 
-## Delivery models
+## Delivery model
 
-**Hosted / central Xpand (the usual case):** the ERP is on a remote server, so the
-operator's **browser** fetches the label stream from the ERP and posts it straight to
-this agent on their own PC (CORS is enabled for this reason):
+Hosted / central Xpand (usual case): ERP is remote, operator's **browser**
+fetches the label stream and posts it to the agent on their own PC:
 
 ```
 ERP server ──(fetch stream)──> browser ──POST http://127.0.0.1:9101/print──> agent ──> USB printer
 ```
 
-**Local / same-machine install:** the ERP server can also post directly to the agent.
+Local / same-machine install: ERP server posts directly to the agent:
 
 ```
-ERP web app ──> server ── POST http://127.0.0.1:9101/print
-                                                              │
-                                              (this agent running on the PC)
-                                                              ▼
-                                                          USB label printer
+ERP web app ──> server ── POST http://127.0.0.1:9101/print ──> agent ──> USB label printer
 ```
 
-Either way the agent never dials the tenant — it only listens on 127.0.0.1.
+Either way the agent only listens on 127.0.0.1.
 
-## Install on a workstation (Windows recommended)
+## Install
+
+Download from GitHub Releases (Windows `.exe` installer, macOS `.dmg` for testing):
+
+1. Run the installer, tray icon appears.
+2. Click tray icon → Agent window → gear → pick label printer → Save.
+3. Verify: `curl http://127.0.0.1:9101/health`
+
+Windows is the production target. macOS build is dev/testing only.
+
+Auto-update: the app checks GitHub Releases on launch and notifies when a
+newer version is available.
+
+## Agent window
+
+- **Printer** — label printer, Save persists to `.agent-config.json`.
+- **Port** — default `9101`. Changing it restarts the server on the new port.
+- **Job Log** — last 100 jobs: time, printer, language, bytes, OK/FAIL, error.
+
+## Running from source
 
 ```bash
-cd printer-agent
 npm install
-npm run rebuild     # only needed for the Electron window (`npm start`);
-                    # builds the binding for Electron's ABI (needs VS Build Tools + Python)
-npm start           # tray icon appears; click it to open the agent window
+npm start            # Electron window (needs rebuild once: npm run rebuild)
+node agent-core.js   # headless, no window (prebuilt binding is enough)
 ```
 
-- `npm install` downloads a **prebuilt** binary, which is enough if you run the agent
-  **headless under Node** (`node agent-core.js`) — no compile.
-- The Electron window runs a different ABI, so running the window requires `npm run rebuild`
-  once (this is also done automatically by `electron-builder` when you build the installer).
-- If you used **Bun** to install, run `bun pm trust @thiagoelg/node-printer` so the
-  prebuilt binary gets downloaded; then `npm run rebuild` if you use the Electron window.
+`npm run rebuild` compiles the native binding for Electron's ABI (needs VS
+Build Tools + Python on Windows). Headless under plain Node uses the prebuilt
+binary, no compile.
 
-Verify it is running:
+## Building installers (GitHub Actions)
+
+You never build locally — push code, CI builds the installers. No C++
+toolchain needed on your machine.
+
+Workflow: `.github/workflows/build-win.yml`, two jobs:
+
+- `build-win` on `windows-latest` → `dist/*.exe` (NSIS installer + portable)
+- `build-mac` on `macos-latest` → `dist/*.dmg` (dev/testing only)
+
+Prerequisites (one time):
+
+1. Push this repo to GitHub (already done: `xpandid/print-agent`).
+2. `package.json` `repository.url` must point at the GitHub repo — it does,
+   auto-update and `electron-builder --publish` rely on it.
+3. No secrets to add — the workflow uses the built-in `GITHUB_TOKEN`.
+
+Build step by step:
+
 ```bash
-curl http://127.0.0.1:9101/health
-# {"ok":true,"printer":"ZDesigner ZD220","printerModule":true}
+# 1. make your changes, bump version in package.json if releasing
+# 2. commit + push to main
+git add -A && git commit -m "describe change" && git push origin main
+
+# 3a. test build without releasing (manual dispatch)
+#     browser: Actions tab → printer-agent-win → Run workflow → Run
+#     when green: download win-installer / mac-installer artifacts
+
+# 3b. release build (attaches .exe + .dmg to a GitHub Release,
+#     installed apps auto-update to it on next launch)
+git tag v1.1.0 && git push origin v1.1.0
 ```
 
-### Using the agent window (BigSeller-style)
+What CI runs per job (Windows shown, mac identical except the target):
 
-- **Printer** — pick the label printer (ZD220 / TSC / dot-matrix) and **Save**
-  (settings persist in `.agent-config.json`).
-- **Port** — default `9101`.
-- **Pause / Resume** — while paused, incoming jobs are rejected (`409`, "Agent is paused").
-- **Job Log** — last 100 jobs (time, printer, bytes, OK/FAIL, error), auto-refresh.
-
-## Running headless (no tray window)
-
-```bash
-npm install @thiagoelg/node-printer      # native binding
-node agent-core.js                       # HTTP server only
+```
+npm install                    # includes electron-updater + native binding prebuilt
+npm run dist:win               # electron-builder --win nsis portable
+                               # rebuilds @thiagoelg/node-printer for Electron's ABI
+                               # (needs VS Build Tools + Python — preinstalled on the runner)
 ```
 
-The server is identical; only the tray window is missing. Bun: `bun install` +
-`bun run agent-core.js` works for the HTTP server, but the native binding loads
-best under Node — use Node on Windows.
+Output → `dist/` on the runner → uploaded as workflow artifacts, and on a
+`v*` tag also attached to the GitHub Release via `softprops/action-gh-release`.
 
-## Build an installer (Windows — the deployment target)
-
-On a **Windows** machine (or a GitHub Actions `windows-latest` runner) with
-Visual Studio Build Tools + Python 3 installed:
+Local builds (only if you must):
 
 ```bash
-cd printer-agent
 npm install
-npm run dist:win
+npm run dist:win   # Windows machine with VS Build Tools + Python 3
+npx electron-builder --mac dmg   # Mac, dev/testing only
 ```
 
-Output: `dist/Xpand Printer Agent Setup 1.0.0.exe` (NSIS one-click installer).
-Electron-builder rebuilds `@thiagoelg/node-printer` against Electron's ABI during
-the build — this step is what makes USB printing work inside the packaged app, so it
-needs the C++/Python toolchain on the build machine. The installer then runs on
-workstations without Node or build tools.
-
-> macOS `npm run dist:mac` is dev/testing only; the native rebuild on macOS has
-> clang/C++ version friction. Production packaging is always done on Windows.
-
-If you want an agent with **no native compile at all**, run it headless with plain
-Node (the prebuilt binding works there directly):
-```bash
-node agent-core.js
-```
-and optionally start it as a background service / `shell:startup` shortcut.
-
-## Start on login
-
-- Windows: put a shortcut to `node_modules/electron/dist/electron.exe <path-to-printer-agent>`
-  in `shell:startup`, or package an installer with `electron-builder`.
-- Headless: create a Windows service or a startup script that runs `node agent-core.js`.
+Never commit `dist/` — it is gitignored. Operators always download from
+GitHub Releases, never from a dev machine.
 
 ## Behavior
 
-- **Auto-retry:** transient failures (printer busy, spooler hiccup) are retried up to
-  **2 extra attempts** (1s apart) before the job is logged as FAIL. Deterministic
-  errors (paused, no printer, binding missing) are never retried.
-- **Job Log:** every attempted print is recorded (last 100): time, printer, bytes,
-  OK/FAIL, error. Kept per-PC and in-memory; it resets when the agent restarts.
-- There is no buffering queue in the agent — each job is dispatched as it arrives.
+- **Serial queue:** concurrent prints are serialized, never interleaved.
+- **Auto-retry:** transient failures retried 2x at 1s; deterministic errors
+  (paused, no binding, no printer) fail fast.
+- **Language check:** ERP sends `{language, data}`; if `language` disagrees
+  with the printer-name guess (e.g. TSPL job to a Zebra), the job still
+  prints but a mismatch warning is logged and returned.
+- **Single instance:** second launch focuses the existing window.
+- **Pause:** `POST /pause?pause=1` pauses (jobs get 409), `?pause=0` resumes,
+  no query toggles.
+- In-memory job log, resets on restart.
 
-## HTTP API (only bound to 127.0.0.1)
+## HTTP API (127.0.0.1 only)
 
-| Method | Path            | Body                     | Response                         |
-| ------ | --------------- | ------------------------ | -------------------------------- |
-| GET    | /health         | —                        | `{ ok, printer, paused, printerModule, ... }` |
-| GET    | /printers       | —                        | `{ printers: ["ZDesigner ZD220"] }` |
-| GET    | /config         | —                        | `{ port, printer, paused }`      |
-| POST   | /config         | `{ port?, printer?, paused? }` | saved config               |
-| GET    | /jobs           | —                        | `{ jobs: [...] }`                |
-| POST   | /pause?pause=1  | —                        | `{ ok, paused }`                 |
-| POST   | /print          | `{ language, data }`     | `{ ok, printer, bytes }`         |
-
-`data` is the raw TCP print stream the ERP built for the selected preset size, so the
-printer always cuts at the configured label size (e.g. `SIZE 30 mm, 20 mm`).
+| Method | Path    | Body                           | Response                                             |
+| ------ | ------- | ------------------------------ | ---------------------------------------------------- |
+| GET    | /health | —                              | `{ ok, version, printer, paused, printerModule, ... }` |
+| GET    | /printers | —                            | `{ printers, languages }`                            |
+| GET    | /config | —                              | `{ port, printer, paused }`                          |
+| POST   | /config | `{ port?, printer?, paused? }` | saved config                                         |
+| GET    | /jobs   | —                              | `{ jobs: [...] }` (newest first)                     |
+| POST   | /pause  | `?pause=1/0`                   | `{ ok, paused }`                                     |
+| POST   | /print  | `{ language, data, printer? }` | `{ ok, printer, bytes, warning? }`                   |
 
 ## Notes
 
-- The agent binds to `127.0.0.1` only and cannot be reached from other machines.
-- Config is stored in `.agent-config.json` next to the app.
-- If you change the port, restart the agent window (or the ERP user's agent port setting
-  must match the ERP-side "My Printer" agent port).
+- Binds `127.0.0.1` only, CORS `*` is safe by design (any site can only reach
+  the operator's own loopback).
+- Config: `.agent-config.json` next to the app.
+- ERP-side agent port must match the user's Printer Settings port.
