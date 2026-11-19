@@ -1,0 +1,68 @@
+{
+  "name": "xpand-printer-agent",
+  "version": "1.1.0",
+  "description": "Local tray agent that prints Xpand label streams (ZPL/TSPL/ESC/P) to USB thermal printers",
+  "main": "main.js",
+  "author": "Xpand",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xpand/xpand-printer-agent.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "rebuild": "node scripts/patch-binding.js && electron-rebuild -f -w @thiagoelg/node-printer && node scripts/copy-binding.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis portable",
+    "publish": "node scripts/publish.js"
+  },
+  "dependencies": {
+    "@thiagoelg/node-printer": "^0.6.2",
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^27.3.11",
+    "electron-builder": "^26.15.3",
+    "electron-rebuild": "^3.2.9"
+  },
+  "build": {
+    "appId": "com.xpand.printeragent",
+    "productName": "Xpand Printer Agent",
+    "files": [
+      "main.js",
+      "agent-core.js",
+      "ui/**/*",
+      "node_modules/**/*"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@thiagoelg/node-printer/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "icon": "ui/icon.png",
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "nsis": {
+      "oneClick": true,
+      "runAfterFinish": true,
+      "perMachine": false
+    },
+    "publish": [
+      {
+        "provider": "github"
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Build output (installers / unpacked apps) — republish with npm run dist:*
+dist/
+
+# Runtime-generated local state
+.agent-config.json
+
+# Logs
+*.log
+npm-debug.log*
