@@ -22,8 +22,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install deps
-        run: npm install
+      - name: Install deps (skip native install script, patched + rebuilt below)
+        run: npm install --ignore-scripts
+
+      - name: Patch native binding (C++17 + python3 + this->_value)
+        run: node scripts/patch-binding.js
 
       - name: Build Windows installer
         run: npm run dist:win
@@ -65,8 +68,11 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install deps
-        run: npm install
+      - name: Install deps (skip native install script, patched + rebuilt below)
+        run: npm install --ignore-scripts
+
+      - name: Patch native binding (C++17 + python3 + this->_value)
+        run: node scripts/patch-binding.js
 
       - name: Build macOS dmg (dev/testing only)
         run: npx electron-builder --mac dmg
