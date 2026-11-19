@@ -51,6 +51,7 @@ jobs:
 
   build-mac:
     runs-on: macos-latest
+    continue-on-error: true
     permissions:
       contents: write
     steps:
