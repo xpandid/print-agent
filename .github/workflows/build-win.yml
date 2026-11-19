@@ -12,13 +12,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -29,6 +29,11 @@ jobs:
         run: npm run dist:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEBUG: electron-builder
+
+      - name: List dist
+        if: always()
+        run: Get-ChildItem dist -Recurse | Select-Object FullName, Length
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -49,13 +54,13 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -66,6 +71,10 @@ jobs:
         run: npx electron-builder --mac dmg
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List dist
+        if: always()
+        run: ls -la dist
 
       - name: Upload dmg artifact
         uses: actions/upload-artifact@v4
