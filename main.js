@@ -4,7 +4,7 @@
  */
 'use strict';
 
-const { app, Tray, Menu, nativeImage, dialog, BrowserWindow } = require('electron');
+const { app, Tray, Menu, nativeImage, dialog, BrowserWindow, ipcMain } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const agent = require('./agent-core');
@@ -23,13 +23,47 @@ if (!gotLock) {
 }
 
 // Auto-update from GitHub Releases (CI publishes dist/*.exe there).
-// Guarded: no-op when electron-updater isn't installed or no publish config.
+// State is pushed to the window; the settings modal offers a manual check.
+let autoUpdater = null;
+let updateState = { status: 'idle', info: null };
 try {
-  const { autoUpdater } = require('electron-updater');
+  ({ autoUpdater } = require('electron-updater'));
+} catch (e) { /* updater optional (headless / no publish config) */ }
+
+function setUpdateState(status, info = null) {
+  updateState = { status, info };
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('agent-update-state', updateState);
+  }
+}
+
+if (autoUpdater) {
+  autoUpdater.autoDownload = true;
+  autoUpdater.on('checking-for-update', () => setUpdateState('checking'));
+  autoUpdater.on('update-available', (info) => setUpdateState('available', { version: info && info.version }));
+  autoUpdater.on('update-not-available', () => setUpdateState('latest'));
+  autoUpdater.on('download-progress', (p) => setUpdateState('downloading', { percent: Math.round(p.percent || 0) }));
+  autoUpdater.on('update-downloaded', (info) => setUpdateState('downloaded', { version: info && info.version }));
+  autoUpdater.on('error', (err) => setUpdateState('error', { message: String((err && err.message) || err) }));
   app.whenReady().then(() => {
     autoUpdater.checkForUpdatesAndNotify().catch(() => {});
   });
-} catch (e) { /* updater optional */ }
+}
+
+ipcMain.handle('agent-update-state', () => updateState);
+ipcMain.handle('agent-check-update', async () => {
+  if (!autoUpdater) return { status: 'unavailable', info: null };
+  setUpdateState('checking');
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (e) {
+    setUpdateState('error', { message: String((e && e.message) || e) });
+  }
+  return updateState;
+});
+ipcMain.handle('agent-quit-install', () => {
+  if (autoUpdater) autoUpdater.quitAndInstall();
+});
 
 let tray = null;
 let win = null;

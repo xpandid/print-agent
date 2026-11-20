@@ -146,6 +146,12 @@
         <label for="port">Port</label>
         <input type="number" id="port" min="1" max="65535" />
         <p class="hint">Pick the label printer installed on this computer. Leave "(default)" to use the OS default printer.</p>
+        <label>App version</label>
+        <div class="hint" style="margin-top:0"><span id="app-version">…</span> <span id="update-state"></span></div>
+        <div class="modal-actions" style="margin-bottom:14px">
+          <button class="close-btn" id="check-update">Check for updates</button>
+          <button class="save" id="quit-install" style="display:none">Restart &amp; install</button>
+        </div>
         <div class="modal-actions">
           <button class="save" id="save">Save</button>
           <button class="close-btn" id="cancel-settings">Cancel</button>

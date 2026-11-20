@@ -21,6 +21,53 @@ const saveNote = document.getElementById('save-note');
 const jobsBody = document.getElementById('jobs');
 const jobsEmpty = document.getElementById('jobs-empty');
 const jobCount = document.getElementById('job-count');
+const appVersionEl = document.getElementById('app-version');
+const updateStateEl = document.getElementById('update-state');
+const checkUpdateBtn = document.getElementById('check-update');
+const quitInstallBtn = document.getElementById('quit-install');
+
+let ipcRenderer = null;
+try {
+  ({ ipcRenderer } = require('electron'));
+} catch (e) { /* headless: no updater UI */ }
+
+function renderUpdateState(state) {
+  if (!updateStateEl) return;
+  quitInstallBtn.style.display = 'none';
+  const s = (state && state.status) || 'idle';
+  if (s === 'idle' || s === 'latest') {
+    updateStateEl.textContent = s === 'latest' ? '· up to date' : '';
+  } else if (s === 'checking') {
+    updateStateEl.textContent = '· checking…';
+  } else if (s === 'available') {
+    updateStateEl.textContent = `· v${(state.info && state.info.version) || '?'} available — downloading…`;
+  } else if (s === 'downloading') {
+    updateStateEl.textContent = `· downloading ${(state.info && state.info.percent) || 0}%…`;
+  } else if (s === 'downloaded') {
+    updateStateEl.textContent = `· v${(state.info && state.info.version) || '?'} ready`;
+    quitInstallBtn.style.display = '';
+  } else if (s === 'error') {
+    updateStateEl.textContent = `· update check failed${state.info && state.info.message ? ': ' + state.info.message : ''}`;
+  } else if (s === 'unavailable') {
+    updateStateEl.textContent = '· auto-update unavailable in this build';
+  }
+}
+
+if (ipcRenderer) {
+  ipcRenderer.on('agent-update-state', (_e, state) => renderUpdateState(state));
+  ipcRenderer.invoke('agent-update-state').then(renderUpdateState).catch(() => {});
+  checkUpdateBtn.addEventListener('click', async () => {
+    renderUpdateState({ status: 'checking' });
+    try {
+      renderUpdateState(await ipcRenderer.invoke('agent-check-update'));
+    } catch (e) {
+      renderUpdateState({ status: 'error', info: { message: String((e && e.message) || e) } });
+    }
+  });
+  quitInstallBtn.addEventListener('click', () => ipcRenderer.invoke('agent-quit-install').catch(() => {}));
+} else if (checkUpdateBtn) {
+  checkUpdateBtn.style.display = 'none';
+}
 
 function request(method, path, body) {
   return new Promise((resolve, reject) => {
@@ -58,6 +105,7 @@ async function refresh() {
     statusEl.textContent = health.printerModule ? 'Online' : 'Offline';
     statusEl.className = 'pill ' + (health.printerModule ? 'on' : 'off');
     banner.style.display = health.printerModule ? 'none' : 'block';
+    if (appVersionEl && health.version) appVersionEl.textContent = 'v' + health.version;
 
     renderJobs(await request('GET', '/jobs').catch(() => ({ jobs: [] })));
   } catch (e) {
