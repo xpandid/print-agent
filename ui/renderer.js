@@ -92,21 +92,44 @@ function escapeHtml(value) {
   }[ch]));
 }
 
-function openSettings() {
+function renderPrinterOptions(current, names) {
+  const options = ['', ...(names || [])];
+  if (current && !options.includes(current)) options.push(current);
+  printerSelect.innerHTML = options
+    .map((p) => `<option value="${escapeHtml(p)}" ${p === current ? 'selected' : ''}>${escapeHtml(p || '(default)')}</option>`)
+    .join('');
+}
+
+async function openSettings() {
   saveNote.textContent = '';
   saveNote.className = '';
-  Promise.all([
-    request('GET', '/config').catch(() => ({})),
-    request('GET', '/printers').catch(() => ({ printers: [] })),
-  ]).then(([config, printers]) => {
-    portInput.value = config.port || port;
-    const current = config.printer || '';
-    const options = ['', ...(printers.printers || [])];
-    printerSelect.innerHTML = options
-      .map((p) => `<option value="${escapeHtml(p)}" ${p === current ? 'selected' : ''}>${escapeHtml(p || '(default)')}</option>`)
-      .join('');
-  }).catch(() => {});
   settingsModal.classList.add('open');
+
+  // Never wipe the dropdown before a successful fetch: on failure the last
+  // known list (and the saved choice) stays selectable.
+  let config = {};
+  try {
+    config = await request('GET', '/config');
+    portInput.value = config.port || portInput.value || port;
+  } catch (e) {
+    saveNote.textContent = 'Agent unreachable — showing last known settings.';
+    saveNote.className = 'err';
+    return;
+  }
+
+  const current = config.printer || '';
+  try {
+    const printers = await request('GET', '/printers');
+    renderPrinterOptions(current, printers.printers);
+    if (!printers.printerModule && !(printers.printers || []).length) {
+      saveNote.textContent = 'Printer list unavailable — binding not loaded or agent offline. Saved choice kept.';
+      saveNote.className = 'err';
+    }
+  } catch (e) {
+    renderPrinterOptions(current, [...printerSelect.options].map((o) => o.value).filter(Boolean));
+    saveNote.textContent = 'Could not load printers — saved choice kept.';
+    saveNote.className = 'err';
+  }
 }
 
 function closeSettings() {
@@ -123,6 +146,7 @@ async function saveSettings() {
     });
     saveNote.textContent = 'Saved.';
     refresh();
+    setTimeout(closeSettings, 600);
   } catch (e) {
     saveNote.textContent = 'Save failed.';
     saveNote.className = 'err';
