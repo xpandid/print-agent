@@ -1,6 +1,6 @@
 {
   "name": "xpand-printer-agent",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Local tray agent that prints Xpand label streams (ZPL/TSPL/ESC/P) to USB thermal printers",
   "main": "main.js",
   "author": "Xpand",
