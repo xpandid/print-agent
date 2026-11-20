@@ -25,6 +25,10 @@ jobs:
       - name: Install deps (skip native install script, patched + rebuilt below)
         run: npm install --ignore-scripts
 
+      - name: Sync version from tag (tags are the source of truth)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node -e "const fs=require('fs');const t=process.env.GITHUB_REF_NAME.slice(1);const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version=t;fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('version',t)"
+
       - name: Patch native binding (C++17 + python3 + this->_value)
         run: node scripts/patch-binding.js
 
@@ -75,6 +79,10 @@ jobs:
 
       - name: Install deps (skip native install script, patched + rebuilt below)
         run: npm install --ignore-scripts
+
+      - name: Sync version from tag (tags are the source of truth)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node -e "const fs=require('fs');const t=process.env.GITHUB_REF_NAME.slice(1);const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.version=t;fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\n');console.log('version',t)"
 
       - name: Patch native binding (C++17 + python3 + this->_value)
         run: node scripts/patch-binding.js
