@@ -103,9 +103,12 @@ async function printWithRetry(data, printer) {
   return last;
 }
 
+const SUPPORTED_LANGUAGES = ['zpl', 'tspl', 'other'];
+
 const state = {
   port: DEFAULT_PORT,
   printer: null, // explicit printer name; null => OS default
+  language: null, // explicit override; null => auto-detect from printer name
   paused: false,
   jobs: [],
   configPath: path.join(__dirname, '.agent-config.json'),
@@ -117,6 +120,9 @@ function loadConfig() {
     const data = JSON.parse(raw);
     if (Number.isInteger(data.port) && data.port > 0 && data.port < 65536) state.port = data.port;
     if (typeof data.printer === 'string') state.printer = data.printer || null;
+    if (typeof data.language === 'string' && SUPPORTED_LANGUAGES.includes(data.language.toLowerCase())) {
+      state.language = data.language.toLowerCase();
+    }
     if (typeof data.paused === 'boolean') state.paused = data.paused;
   } catch (e) {
     /* first run: no config yet */
@@ -125,7 +131,7 @@ function loadConfig() {
 
 function saveConfig() {
   try {
-    fs.writeFileSync(state.configPath, JSON.stringify({ port: state.port, printer: state.printer, paused: state.paused }, null, 2));
+    fs.writeFileSync(state.configPath, JSON.stringify({ port: state.port, printer: state.printer, language: state.language, paused: state.paused }, null, 2));
   } catch (e) {
     console.error('Unable to persist agent config:', e.message);
   }
@@ -142,6 +148,10 @@ function setConfig(next) {
   }
   if (typeof next.printer === 'string') state.printer = next.printer.trim().slice(0, 256) || null;
   if (next.printer === null) state.printer = null;
+  if (typeof next.language === 'string' && SUPPORTED_LANGUAGES.includes(next.language.toLowerCase())) {
+    state.language = next.language.toLowerCase();
+  }
+  if (next.language === null) state.language = null; // back to auto-detect
   if (typeof next.paused === 'boolean') state.paused = next.paused;
   saveConfig();
 }
@@ -166,7 +176,17 @@ function effectivePrinter() {
   return state.printer || getDefaultPrinterName();
 }
 
-// Best-effort stream language hint from the selected printer name, so the ERP
+/**
+ * Effective stream language: manual override wins, otherwise sniff the
+ * printer name. Unknown names fall back to ZPL (most common thermal dialect).
+ * @return {{language: string, source: 'manual'|'auto'}}
+ */
+function effectiveLanguage(printerName) {
+  if (state.language) return { language: state.language, source: 'manual' };
+  return { language: detectLanguage(printerName), source: 'auto' };
+}
+
+// Best-effort stream language hint from the printer name, so the ERP
 // builds the right format (ZPL/TSPL/ESC/P) without asking the user.
 function detectLanguage(printerName) {
   const n = String(printerName || '').toLowerCase();
@@ -237,9 +257,9 @@ async function handlePrint(req, res) {
     return json(res, 400, { ok: false, error: 'No printer selected — pick a printer in the Agent window first' });
   }
 
-  const expected = detectLanguage(printer);
+  const { language: expected, source: langSource } = effectiveLanguage(printer);
   const mismatch = language && language !== expected
-    ? ` (language mismatch: job is ${language}, printer looks like ${expected})`
+    ? ` (language mismatch: job is ${language}, printer is ${expected}${langSource === 'manual' ? ' (manual)' : ''})`
     : '';
   const result = await enqueuePrint(data, printer);
 
@@ -270,12 +290,15 @@ function createServer() {
 
       if (req.method === 'GET' && url.pathname === '/health') {
         const printer = effectivePrinter();
+        const { language: detectedLanguage, source: languageSource } = effectiveLanguage(printer);
         return json(res, 200, {
           ok: true,
           version: AGENT_VERSION,
           printer,
           configuredPrinter: state.printer,
-          detectedLanguage: detectLanguage(printer),
+          configuredLanguage: state.language,
+          detectedLanguage,
+          languageSource,
           paused: state.paused,
           jobs: state.jobs.length,
           queueLength: 0,
@@ -294,7 +317,7 @@ function createServer() {
       }
 
       if (req.method === 'GET' && url.pathname === '/config') {
-        return json(res, 200, { port: state.port, printer: state.printer, paused: state.paused });
+        return json(res, 200, { port: state.port, printer: state.printer, language: state.language, paused: state.paused });
       }
 
       if (req.method === 'POST' && url.pathname === '/config') {
@@ -305,7 +328,7 @@ function createServer() {
           return json(res, 400, { ok: false, error: 'Invalid JSON body' });
         }
         setConfig(body);
-        return json(res, 200, { ok: true, port: state.port, printer: state.printer, paused: state.paused });
+        return json(res, 200, { ok: true, port: state.port, printer: state.printer, language: state.language, paused: state.paused });
       }
 
       if (req.method === 'GET' && url.pathname === '/jobs') {

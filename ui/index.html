@@ -101,7 +101,7 @@
     <span class="logo-wrap"><img class="logo" src="./xpand.svg" alt="Xpand" /></span>
     <div class="titles">
       <h1>Printer Agent</h1>
-      <p>Local label printing · 127.0.0.1</p>
+      <p id="agent-sub">Local label printing · 127.0.0.1</p>
     </div>
     <span class="pill off" id="status">connecting…</span>
     <span class="spacer"></span>
@@ -143,6 +143,14 @@
       <div class="modal-body">
         <label for="printer">Label printer</label>
         <select id="printer"></select>
+        <label for="language">Printer language</label>
+        <select id="language">
+          <option value="">Auto-detect from printer name</option>
+          <option value="zpl">Zebra (ZPL)</option>
+          <option value="tspl">TSC / Datamax (TSPL)</option>
+          <option value="other">Other (no thermal stream — use browser/file)</option>
+        </select>
+        <p class="hint">Force ZPL/TSPL when the printer name isn't recognized (auto-guess is ZPL).</p>
         <label for="port">Port</label>
         <input type="number" id="port" min="1" max="65535" />
         <p class="hint">Pick the label printer installed on this computer. Leave "(default)" to use the OS default printer.</p>

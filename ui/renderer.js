@@ -15,12 +15,14 @@ const statusEl = document.getElementById('status');
 const gearBtn = document.getElementById('gear');
 const settingsModal = document.getElementById('settings-modal');
 const printerSelect = document.getElementById('printer');
+const languageSelect = document.getElementById('language');
 const portInput = document.getElementById('port');
 const saveBtn = document.getElementById('save');
 const saveNote = document.getElementById('save-note');
 const jobsBody = document.getElementById('jobs');
 const jobsEmpty = document.getElementById('jobs-empty');
 const jobCount = document.getElementById('job-count');
+const agentSubEl = document.getElementById('agent-sub');
 const appVersionEl = document.getElementById('app-version');
 const updateStateEl = document.getElementById('update-state');
 const checkUpdateBtn = document.getElementById('check-update');
@@ -106,6 +108,13 @@ async function refresh() {
     statusEl.className = 'pill ' + (health.printerModule ? 'on' : 'off');
     banner.style.display = health.printerModule ? 'none' : 'block';
     if (appVersionEl && health.version) appVersionEl.textContent = 'v' + health.version;
+    if (agentSubEl) {
+      const lang = (health.detectedLanguage || 'zpl').toUpperCase();
+      const manual = health.languageSource === 'manual' ? ' (manual)' : '';
+      agentSubEl.textContent = health.printer
+        ? `${health.printer} · ${lang}${manual}`
+        : 'Local label printing · 127.0.0.1';
+    }
 
     renderJobs(await request('GET', '/jobs').catch(() => ({ jobs: [] })));
   } catch (e) {
@@ -140,11 +149,14 @@ function escapeHtml(value) {
   }[ch]));
 }
 
-function renderPrinterOptions(current, names) {
+function renderPrinterOptions(current, names, langMap) {
   const options = ['', ...(names || [])];
   if (current && !options.includes(current)) options.push(current);
   printerSelect.innerHTML = options
-    .map((p) => `<option value="${escapeHtml(p)}" ${p === current ? 'selected' : ''}>${escapeHtml(p || '(default)')}</option>`)
+    .map((p) => {
+      const lang = p && langMap && langMap[p] ? ` (${langMap[p].toUpperCase()})` : '';
+      return `<option value="${escapeHtml(p)}" ${p === current ? 'selected' : ''}>${escapeHtml((p || '(default)') + lang)}</option>`;
+    })
     .join('');
 }
 
@@ -166,9 +178,14 @@ async function openSettings() {
   }
 
   const current = config.printer || '';
+  languageSelect.value = config.language || '';
   try {
     const printers = await request('GET', '/printers');
-    renderPrinterOptions(current, printers.printers);
+    const langMap = {};
+    for (const entry of printers.languages || []) {
+      if (entry && entry.printer) langMap[entry.printer] = entry.language;
+    }
+    renderPrinterOptions(current, printers.printers, langMap);
     if (!printers.printerModule && !(printers.printers || []).length) {
       saveNote.textContent = 'Printer list unavailable — binding not loaded or agent offline. Saved choice kept.';
       saveNote.className = 'err';
@@ -190,6 +207,7 @@ async function saveSettings() {
   try {
     await request('POST', '/config', {
       printer: printerSelect.value || null,
+      language: languageSelect.value || null,
       port: parseInt(portInput.value, 10) || 9101,
     });
     saveNote.textContent = 'Saved.';
